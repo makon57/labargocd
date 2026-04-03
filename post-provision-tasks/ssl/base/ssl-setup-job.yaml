@@ -1,0 +1,233 @@
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: cluster-placeholder-ssl-setup
+  namespace: cluster-placeholder
+  annotations:
+    argocd.argoproj.io/sync-wave: "11"
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 3600
+  ttlSecondsAfterFinished: 7200
+  template:
+    spec:
+      serviceAccountName: ssl-setup-sa
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+      volumes:
+        - name: tmp-volume
+          emptyDir: {}
+      containers:
+        - name: ssl-setup
+          image: registry.redhat.io/openshift4/ose-cli@sha256:69762925e16053d77685ff3a08b3b45dd2bfa5d68277851bc6969b368bbd0cb9
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          volumeMounts:
+            - name: tmp-volume
+              mountPath: /tmp
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -euo pipefail
+
+              CLUSTER_NAME="${CLUSTER_NAME}"
+              CERT_SECRET_NAME="${CLUSTER_NAME}-wildcard-certificate"
+
+              # Get actual admin kubeconfig secret name from ClusterDeployment
+              KUBECONFIG_SECRET=$(oc get clusterdeployment "${CLUSTER_NAME}" \
+                -n "${CLUSTER_NAME}" \
+                -o jsonpath='{.spec.clusterMetadata.adminKubeconfigSecretRef.name}' \
+                2>/dev/null)
+
+              if [ -z "$KUBECONFIG_SECRET" ]; then
+                echo "ERROR: Could not determine admin kubeconfig secret name"
+                exit 1
+              fi
+
+              echo "Using admin kubeconfig secret: $KUBECONFIG_SECRET"
+
+              echo "=== Step 1: Wait for cluster provisioning to complete ==="
+              for i in $(seq 1 90); do  # 45 minutes max
+                STATUS=$(oc get clusterdeployment "${CLUSTER_NAME}" \
+                  -n "${CLUSTER_NAME}" \
+                  -o jsonpath='{.status.conditions[?(@.type=="Provisioned")].status}' \
+                  2>/dev/null || echo "False")
+                if [ "$STATUS" = "True" ]; then
+                  echo "Cluster provisioning complete."
+                  break
+                fi
+                echo "Waiting for cluster provisioning... (attempt ${i}/90)"
+                sleep 30
+              done
+
+              if [ "$STATUS" != "True" ]; then
+                echo "ERROR: Cluster provisioning did not complete within timeout"  # yamllint disable-line rule:line-length
+                exit 1
+              fi
+
+              echo "=== Step 2: Wait for admin kubeconfig secret ==="
+              for i in $(seq 1 36); do
+                if oc get secret "${KUBECONFIG_SECRET}" -n "${CLUSTER_NAME}" \
+                  2>/dev/null; then
+                  echo "Admin kubeconfig secret found."
+                  break
+                fi
+                echo "Waiting for admin kubeconfig secret... (attempt ${i}/36)"  # yamllint disable-line rule:line-length
+                sleep 10
+              done
+
+              if ! oc get secret "${KUBECONFIG_SECRET}" -n "${CLUSTER_NAME}" \
+                2>/dev/null; then
+                echo "ERROR: Admin kubeconfig secret not found"
+                exit 1
+              fi
+
+              echo "=== Step 3: Update cert-manager with cluster AWS credentials ==="
+              # Extract cluster-specific AWS credentials from Crossplane
+              ACCESS_KEY_ID=$(oc get secret aws-credentials -n "${CLUSTER_NAME}" \
+                -o jsonpath='{.data.aws_access_key_id}' | base64 -d)
+              SECRET_ACCESS_KEY=$(oc get secret aws-credentials -n "${CLUSTER_NAME}" \
+                -o jsonpath='{.data.aws_secret_access_key}')
+
+              echo "Using AWS Access Key ID: ${ACCESS_KEY_ID}"
+
+              # Update cert-manager secret with cluster-specific credentials
+              oc create secret generic "${CLUSTER_NAME}-cert-manager-aws" \
+                -n openshift-ingress \
+                --from-literal=secret_access_key="$(echo $SECRET_ACCESS_KEY | base64 -d)" \
+                --dry-run=client -o yaml | oc apply -f -
+
+              echo "=== Step 4: Create cluster-specific ClusterIssuer ==="
+              cat <<EOF | oc apply -f -
+              apiVersion: cert-manager.io/v1
+              kind: ClusterIssuer
+              metadata:
+                name: letsencrypt-${CLUSTER_NAME}
+              spec:
+                acme:
+                  email: partner-lab@redhat.com
+                  server: https://acme-v02.api.letsencrypt.org/directory
+                  privateKeySecretRef:
+                    name: letsencrypt-${CLUSTER_NAME}-account-key
+                  solvers:
+                  - dns01:
+                      route53:
+                        accessKeyID: "${ACCESS_KEY_ID}"
+                        region: us-east-1
+                        secretAccessKeySecretRef:
+                          name: ${CLUSTER_NAME}-cert-manager-aws
+                          key: secret_access_key
+              EOF
+
+              echo "=== Step 5: Create Certificate resource ==="
+              cat <<EOF | oc apply -f -
+              apiVersion: cert-manager.io/v1
+              kind: Certificate
+              metadata:
+                name: ${CERT_SECRET_NAME}
+                namespace: openshift-ingress
+              spec:
+                secretName: ${CERT_SECRET_NAME}
+                issuerRef:
+                  name: letsencrypt-${CLUSTER_NAME}
+                  kind: ClusterIssuer
+                dnsNames:
+                  - "*.apps.${CLUSTER_NAME}.openshiftpartnerlabs.com"
+                  - "api.${CLUSTER_NAME}.openshiftpartnerlabs.com"
+                duration: 2160h
+                renewBefore: 360h
+              EOF
+
+              echo "=== Step 6: Wait for cert-manager to generate the TLS secret ==="  # yamllint disable-line rule:line-length
+              for i in $(seq 1 36); do
+                if oc get secret "${CERT_SECRET_NAME}" -n openshift-ingress 2>/dev/null; then
+                  echo "Certificate secret found."
+                  break
+                fi
+                echo "Waiting for certificate secret... (attempt ${i}/36)"
+                sleep 10
+              done
+
+              # Verify the secret exists and has tls.crt and tls.key
+              TLS_CRT=$(oc get secret "${CERT_SECRET_NAME}" -n openshift-ingress \
+                -o jsonpath='{.data.tls\.crt}')
+              TLS_KEY=$(oc get secret "${CERT_SECRET_NAME}" -n openshift-ingress \
+                -o jsonpath='{.data.tls\.key}')
+
+              if [ -z "${TLS_CRT}" ] || [ -z "${TLS_KEY}" ]; then
+                echo "ERROR: TLS certificate secret is missing tls.crt or tls.key"  # yamllint disable-line rule:line-length
+                exit 1
+              fi
+              echo "TLS certificate data extracted successfully."
+
+              echo "=== Step 7: Extract target cluster kubeconfig ==="
+              oc extract secret/"${KUBECONFIG_SECRET}" -n "${CLUSTER_NAME}" --to=/tmp --confirm
+              export KUBECONFIG=/tmp/kubeconfig
+
+              echo "=== Step 8: Wait for target cluster API to be reachable ==="  # yamllint disable-line rule:line-length
+              for i in $(seq 1 30); do
+                if oc --kubeconfig=/tmp/kubeconfig get nodes 2>/dev/null; then
+                  echo "Target cluster is reachable."
+                  break
+                fi
+                echo "Waiting for target cluster API... (attempt ${i}/30)"
+                sleep 20
+              done
+
+              echo "=== Step 9: Create TLS secret on target cluster ==="
+              cat <<EOF | oc --kubeconfig=/tmp/kubeconfig apply -f -
+              apiVersion: v1
+              kind: Secret
+              metadata:
+                name: ${CERT_SECRET_NAME}
+                namespace: openshift-ingress
+              data:
+                tls.crt: ${TLS_CRT}
+                tls.key: ${TLS_KEY}
+              type: kubernetes.io/tls
+              EOF
+
+              echo "=== Step 10: Patch IngressController to use the certificate ==="  # yamllint disable-line rule:line-length
+              oc --kubeconfig=/tmp/kubeconfig patch ingresscontroller default \
+                -n openshift-ingress-operator \
+                --type=merge \
+                -p "{\"spec\":{\"defaultCertificate\":{\"name\":\"${CERT_SECRET_NAME}\"}}}"  # yamllint disable-line rule:line-length
+
+              echo "=== Step 11: Add cleanup finalizers for SSL resources ==="
+              # Add finalizer to cert-manager secret for cleanup when cluster is deleted
+              oc patch secret "${CLUSTER_NAME}-cert-manager-aws" -n openshift-ingress --type=json \
+                -p='[{"op": "add", "path": "/metadata/finalizers", "value": ["openshiftpartnerlabs.com/deprovision"]}]' \
+                2>/dev/null || true
+
+              # Add finalizer to ClusterIssuer for cleanup when cluster is deleted
+              oc patch clusterissuer "letsencrypt-${CLUSTER_NAME}" --type=json \
+                -p='[{"op": "add", "path": "/metadata/finalizers", "value": ["openshiftpartnerlabs.com/deprovision"]}]' \
+                2>/dev/null || true
+
+              # Add cluster name label for easier identification during cleanup
+              oc label secret "${CLUSTER_NAME}-cert-manager-aws" -n openshift-ingress \
+                "openshiftpartnerlabs.com/cluster=${CLUSTER_NAME}" --overwrite 2>/dev/null || true
+              oc label clusterissuer "letsencrypt-${CLUSTER_NAME}" \
+                "openshiftpartnerlabs.com/cluster=${CLUSTER_NAME}" --overwrite 2>/dev/null || true
+
+              echo "=== SSL setup complete for ${CLUSTER_NAME} ==="
+          env:
+            - name: CLUSTER_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace

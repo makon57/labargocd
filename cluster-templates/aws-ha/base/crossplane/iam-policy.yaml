@@ -9,7 +9,6 @@ metadata:
 spec:
   forProvider:
     description: "Permissions required for OpenShift 4.20 installation on AWS"
-    name: OpenShift4InstallerPolicy
     tags:
       Purpose: OpenShift-Installer
       CreatedBy: Crossplane

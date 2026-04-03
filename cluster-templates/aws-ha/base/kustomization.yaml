@@ -14,6 +14,8 @@ resources:
   - managedcluster.yaml
   - install-config-secret.yaml
   - deprovision-finalizer-job.yaml
+  # Post-provision tasks
+  - ../../../post-provision-tasks/ssl/base
 
 # Note: Cluster-scoped resources (Provider, ProviderConfig) are in
 # crossplane/cluster-scoped/ and must be added at the overlay level

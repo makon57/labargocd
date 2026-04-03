@@ -104,3 +104,65 @@ patches:
       - op: replace
         path: /spec/writeConnectionSecretToRef/namespace
         value: dev-cluster-01
+
+  # Rename SSL Job
+  - target:
+      kind: Job
+      name: cluster-placeholder-ssl-setup
+    patch: |-
+      - op: replace
+        path: /metadata/name
+        value: dev-cluster-01-ssl-setup
+
+  # Rename SSL ServiceAccount
+  - target:
+      kind: ServiceAccount
+      name: ssl-setup-sa
+    patch: |-
+      - op: replace
+        path: /metadata/namespace
+        value: dev-cluster-01
+
+  # Rename SSL ClusterRoleBinding
+  - target:
+      group: rbac.authorization.k8s.io
+      kind: ClusterRoleBinding
+      name: cluster-placeholder-ssl-setup-clusterrolebinding
+    patch: |-
+      - op: replace
+        path: /metadata/name
+        value: dev-cluster-01-ssl-setup-clusterrolebinding
+      - op: replace
+        path: /subjects/0/namespace
+        value: dev-cluster-01
+
+  # Rename SSL cleanup Job
+  - target:
+      kind: Job
+      name: cluster-placeholder-ssl-cleanup
+    patch: |-
+      - op: replace
+        path: /metadata/name
+        value: dev-cluster-01-ssl-cleanup
+
+  # Rename SSL cleanup ServiceAccount
+  - target:
+      kind: ServiceAccount
+      name: ssl-cleanup-sa
+    patch: |-
+      - op: replace
+        path: /metadata/namespace
+        value: dev-cluster-01
+
+  # Rename SSL cleanup ClusterRoleBinding
+  - target:
+      group: rbac.authorization.k8s.io
+      kind: ClusterRoleBinding
+      name: cluster-placeholder-ssl-cleanup-clusterrolebinding
+    patch: |-
+      - op: replace
+        path: /metadata/name
+        value: dev-cluster-01-ssl-cleanup-clusterrolebinding
+      - op: replace
+        path: /subjects/0/namespace
+        value: dev-cluster-01

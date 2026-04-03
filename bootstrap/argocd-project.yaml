@@ -55,6 +55,14 @@ spec:
       kind: UserPolicyAttachment
     - group: iam.aws.upbound.io
       kind: AccessKey
+    # RBAC cluster-scoped resources for SSL setup
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRole
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRoleBinding
+    # cert-manager cluster-scoped resources for SSL setup
+    - group: cert-manager.io
+      kind: ClusterIssuer
 
   # Namespace resource whitelist
   namespaceResourceWhitelist:
@@ -70,10 +78,14 @@ spec:
       kind: Deployment
     - group: batch
       kind: Job
+    - group: batch
+      kind: CronJob
     - group: rbac.authorization.k8s.io
       kind: Role
     - group: rbac.authorization.k8s.io
       kind: RoleBinding
+    - group: cert-manager.io
+      kind: Certificate
     - group: argoproj.io
       kind: Application
     - group: hive.openshift.io
