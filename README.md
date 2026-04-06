@@ -109,7 +109,18 @@ See [secrets/README.md](secrets/README.md) for detailed guidance.
 
 ### 4. Add cluster configuration
 
-See [docs/adding-clusters.md](docs/adding-clusters.md) or [clusters/README.md](clusters/README.md).
+**Option A: Use the automated script (Recommended)**
+```bash
+# Interactive mode - prompts for configuration
+./add-cluster.sh my-new-cluster
+
+# Non-interactive mode - uses defaults
+./add-cluster.sh my-new-cluster --non-interactive
+```
+
+**Option B: Manual configuration**
+
+See [docs/adding-clusters.md](docs/adding-clusters.md) or [clusters/README.md](clusters/README.md) for manual setup instructions.
 
 ### 5. Monitor provisioning
 
@@ -138,6 +149,7 @@ oc get nodes
 | Architecture | [docs/architecture.md](docs/architecture.md) |
 | Prerequisites | [docs/prerequisites.md](docs/prerequisites.md) |
 | Adding Clusters | [docs/adding-clusters.md](docs/adding-clusters.md) |
+| Add Cluster Script | [docs/add-cluster-script.md](docs/add-cluster-script.md) |
 | Cluster Operations | [docs/operations.md](docs/operations.md) |
 | Troubleshooting | [docs/troubleshooting.md](docs/troubleshooting.md) |
 | Advanced Features | [docs/advanced.md](docs/advanced.md) |
