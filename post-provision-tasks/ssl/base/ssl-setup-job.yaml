@@ -32,10 +32,10 @@ spec:
           resources:
             requests:
               cpu: 100m
-              memory: 128Mi
+              memory: 256Mi
             limits:
               cpu: 500m
-              memory: 256Mi
+              memory: 512Mi
           volumeMounts:
             - name: tmp-volume
               mountPath: /tmp
@@ -108,7 +108,7 @@ spec:
 
               # Update cert-manager secret with cluster-specific credentials
               oc create secret generic "${CLUSTER_NAME}-cert-manager-aws" \
-                -n openshift-ingress \
+                -n cert-manager \
                 --from-literal=secret_access_key="$(echo $SECRET_ACCESS_KEY | base64 -d)" \
                 --dry-run=client -o yaml | oc apply -f -
 
@@ -210,7 +210,7 @@ spec:
 
               echo "=== Step 11: Add cleanup finalizers for SSL resources ==="
               # Add finalizer to cert-manager secret for cleanup when cluster is deleted
-              oc patch secret "${CLUSTER_NAME}-cert-manager-aws" -n openshift-ingress --type=json \
+              oc patch secret "${CLUSTER_NAME}-cert-manager-aws" -n cert-manager --type=json \
                 -p='[{"op": "add", "path": "/metadata/finalizers", "value": ["openshiftpartnerlabs.com/deprovision"]}]' \
                 2>/dev/null || true
 
@@ -220,7 +220,7 @@ spec:
                 2>/dev/null || true
 
               # Add cluster name label for easier identification during cleanup
-              oc label secret "${CLUSTER_NAME}-cert-manager-aws" -n openshift-ingress \
+              oc label secret "${CLUSTER_NAME}-cert-manager-aws" -n cert-manager \
                 "openshiftpartnerlabs.com/cluster=${CLUSTER_NAME}" --overwrite 2>/dev/null || true
               oc label clusterissuer "letsencrypt-${CLUSTER_NAME}" \
                 "openshiftpartnerlabs.com/cluster=${CLUSTER_NAME}" --overwrite 2>/dev/null || true
