@@ -1,0 +1,104 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: 4042198f-isarnetvirt
+
+resources:
+  - ../../cluster-templates/aws-ha/base
+
+patches:
+  # Install config secret content - must come before rename
+  - path: patches/install-config.yaml
+
+  # Rename ClusterDeployment
+  - target:
+      kind: ClusterDeployment
+      name: cluster-placeholder
+    patch: |-
+      - op: replace
+        path: /metadata/name
+        value: 4042198f-isarnetvirt
+      - op: replace
+        path: /spec/clusterName
+        value: 4042198f-isarnetvirt
+      - op: replace
+        path: /spec/baseDomain
+        value: openshiftpartnerlabs.com
+      - op: replace
+        path: /spec/platform/aws/region
+        value: us-east-2
+      - op: replace
+        path: /spec/provisioning/imageSetRef/name
+        value: img4.21.9-x86-64-appsub
+      - op: replace
+        path: /spec/provisioning/installConfigSecretRef/name
+        value: 4042198f-isarnetvirt-install-config
+      - op: replace
+        path: /spec/provisioning/sshPrivateKeySecretRef/name
+        value: 4042198f-isarnetvirt-ssh-key
+      - op: remove
+        path: /spec/provisioning/manifestsConfigMapRef
+
+  # Rename MachinePool
+  - target:
+      kind: MachinePool
+      name: cluster-placeholder-worker
+    patch: |-
+      - op: replace
+        path: /metadata/name
+        value: 4042198f-isarnetvirt-worker
+      - op: replace
+        path: /spec/clusterDeploymentRef/name
+        value: 4042198f-isarnetvirt
+      - op: replace
+        path: /spec/replicas
+        value: 0
+      - op: replace
+        path: /spec/platform/aws/type
+        value: c5d.metal
+
+  # Rename ManagedCluster
+  - target:
+      kind: ManagedCluster
+      name: cluster-placeholder
+    patch: |-
+      - op: replace
+        path: /metadata/name
+        value: 4042198f-isarnetvirt
+      - op: add
+        path: /metadata/labels/environment
+        value: production
+
+  # Rename KlusterletAddonConfig
+  - target:
+      kind: KlusterletAddonConfig
+      name: cluster-placeholder
+    patch: |-
+      - op: replace
+        path: /metadata/name
+        value: 4042198f-isarnetvirt
+      - op: replace
+        path: /spec/clusterName
+        value: 4042198f-isarnetvirt
+      - op: replace
+        path: /spec/clusterNamespace
+        value: 4042198f-isarnetvirt
+
+  # Rename install-config Secret
+  - target:
+      kind: Secret
+      name: cluster-placeholder-install-config
+    patch: |-
+      - op: replace
+        path: /metadata/name
+        value: 4042198f-isarnetvirt-install-config
+
+  # Fix AccessKey namespace for secret (if using Crossplane)
+  - target:
+      group: iam.aws.upbound.io
+      kind: AccessKey
+      name: ocp-installer-access-key
+    patch: |-
+      - op: replace
+        path: /spec/writeConnectionSecretToRef/namespace
+        value: 4042198f-isarnetvirt
