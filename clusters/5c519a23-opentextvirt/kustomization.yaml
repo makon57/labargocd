@@ -29,7 +29,7 @@ patches:
         value: us-east-1
       - op: replace
         path: /spec/provisioning/imageSetRef/name
-        value: img4.20.10-x86-64-appsub
+        value: img4.21.9-x86-64-appsub
       - op: replace
         path: /spec/provisioning/installConfigSecretRef/name
         value: 5c519a23-opentextvirt-install-config
