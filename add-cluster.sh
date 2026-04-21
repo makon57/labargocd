@@ -235,7 +235,7 @@ stringData:
           aws:
             type: $worker_type
             rootVolume:
-              iops: 2000
+              iops: 4000
               size: 100
               type: gp3
             zones:
@@ -321,29 +321,23 @@ print_next_steps() {
     echo
     echo "2. Create required secrets in the cluster namespace:"
     echo
-    echo "   📍 AWS credentials:"
-    echo -e "   ${BLUE}oc create secret generic aws-credentials \\${NC}"
-    echo -e "   ${BLUE}     --from-literal=aws_access_key_id=<your-access-key> \\${NC}"
-    echo -e "   ${BLUE}     --from-literal=aws_secret_access_key=<your-secret-key> \\${NC}"
-    echo -e "   ${BLUE}     -n $cluster_name${NC}"
-    echo
     echo "   📍 Pull secret (download from console.redhat.com):"
-    echo -e "   ${BLUE}oc create secret generic pull-secret \\${NC}"
-    echo -e "   ${BLUE}     --from-file=.dockerconfigjson=pull-secret.json \\${NC}"
-    echo -e "   ${BLUE}     --type=kubernetes.io/dockerconfigjson \\${NC}"
-    echo -e "   ${BLUE}     -n $cluster_name${NC}"
+    echo -e "   ${BLUE}oc create secret generic pull-secret \\
+     --from-file=.dockerconfigjson=pull-secret.json \\
+     --type=kubernetes.io/dockerconfigjson \\
+     -n $cluster_name${NC}"
     echo
     echo "   📍 SSH key:"
     echo -e "   ${BLUE}ssh-keygen -t rsa -b 4096 -f $cluster_name-ssh-key -N \"\"${NC}"
-    echo -e "   ${BLUE}oc create secret generic $cluster_name-ssh-key \\${NC}"
-    echo -e "   ${BLUE}     --from-file=ssh-privatekey=$cluster_name-ssh-key \\${NC}"
-    echo -e "   ${BLUE}     --from-file=ssh-publickey=$cluster_name-ssh-key.pub \\${NC}"
-    echo -e "   ${BLUE}     --type=kubernetes.io/ssh-auth \\${NC}"
-    echo -e "   ${BLUE}     -n $cluster_name${NC}"
+    echo -e "   ${BLUE}oc create secret generic $cluster_name-ssh-key \\
+     --from-file=ssh-privatekey=$cluster_name-ssh-key \\
+     --from-file=ssh-publickey=$cluster_name-ssh-key.pub \\
+     --type=kubernetes.io/ssh-auth \\
+     -n $cluster_name${NC}"
     echo
     echo "3. Commit and push the configuration:"
     echo -e "   ${BLUE}git add clusters/$cluster_name/${NC}"
-    echo -e "   ${BLUE}git commit -m \"Add $cluster_name cluster configuration\"${NC}"
+    echo -e "   ${BLUE}git commit -m \"[PROVISION] Add $cluster_name cluster configuration\"${NC}"
     echo -e "   ${BLUE}git push origin \$(git branch --show-current)${NC}"
     echo
     echo "4. Monitor the provisioning process:"
@@ -351,7 +345,8 @@ print_next_steps() {
     echo
     echo -e "${YELLOW}⚠️  Important notes:${NC}"
     echo "• Provisioning takes 30-45 minutes"
-    echo "• Make sure all secrets are created before pushing the configuration"
+    echo "• AWS credentials are automatically managed by Crossplane"
+    echo "• Make sure all required secrets are created before pushing the configuration"
     echo "• Review the generated configuration files before committing"
     echo "• The cluster will be managed by ArgoCD after the first sync"
     echo
