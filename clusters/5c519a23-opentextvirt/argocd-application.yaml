@@ -1,0 +1,35 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: 5c519a23-opentextvirt
+  namespace: openshift-gitops
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: 5c519a23-opentextvirt
+  source:
+    repoURL: https://github.com/redhat-openshift-partner-labs/labargocd.git
+    targetRevision: main
+    path: clusters/5c519a23-opentextvirt
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: 5c519a23-opentextvirt
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: false  # CRITICAL: Must be false to prevent accidental cluster deletion
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+  ignoreDifferences:
+    - group: hive.openshift.io
+      kind: ClusterDeployment
+      jsonPointers:
+        - /status
+        - /spec/clusterMetadata
+        - /spec/installed
+    - group: cluster.open-cluster-management.io
+      kind: ManagedCluster
+      jsonPointers:
+        - /status
+        - /spec/managedClusterClientConfigs
